@@ -1,0 +1,33 @@
+{
+  "name": "agent-identity-sdk",
+  "version": "0.1.0",
+  "description": "Signed identity tokens for AI agents — Ed25519 JWTs with delegation chains and scope attenuation.",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "type": "module",
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc"
+  },
+  "keywords": [
+    "agent",
+    "identity",
+    "jwt",
+    "ed25519",
+    "ai",
+    "delegation"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "jose": "^6.2.2"
+  },
+  "devDependencies": {
+    "typescript": "^5"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

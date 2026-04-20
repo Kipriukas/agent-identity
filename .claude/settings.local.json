@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(vercel --version)",
+      "Bash(npx vercel *)",
+      "Bash(echo \"---GIT_EXIT:$?---\")",
+      "Bash(gh auth *)",
+      "Bash(git --version)",
+      "Bash(gh --version)",
+      "Bash(npm view *)",
+      "Bash(git init *)",
+      "Bash(git check-ignore *)",
+      "Bash(git add *)"
+    ]
+  }
+}
