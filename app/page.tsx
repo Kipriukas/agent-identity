@@ -111,6 +111,14 @@ export default function Home() {
             >
               npm
             </a>
+            <a
+              href="https://github.com/Kipriukas/agent-identity"
+              target="_blank"
+              rel="noreferrer"
+              style={{ color: '#aaa', textDecoration: 'none' }}
+            >
+              GitHub
+            </a>
           </div>
         </nav>
 
@@ -370,6 +378,17 @@ const result = await verifyToken({ jwt: token.jwt, publicKey })
               style={{ color: '#4ade80', textDecoration: 'none' }}
             >
               kiprasbusinees@gmail.com
+            </a>
+          </div>
+          <div>
+            GitHub:{' '}
+            <a
+              href="https://github.com/Kipriukas/agent-identity"
+              target="_blank"
+              rel="noreferrer"
+              style={{ color: '#4ade80', textDecoration: 'none' }}
+            >
+              github.com/Kipriukas/agent-identity
             </a>
           </div>
         </footer>
