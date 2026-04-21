@@ -100,6 +100,9 @@ export default function Home() {
             <Link href="/docs" style={{ color: '#aaa', textDecoration: 'none' }}>
               Docs
             </Link>
+            <Link href="/integrations" style={{ color: '#aaa', textDecoration: 'none' }}>
+              Integrations
+            </Link>
             <Link href="/dashboard" style={{ color: '#aaa', textDecoration: 'none' }}>
               Dashboard
             </Link>

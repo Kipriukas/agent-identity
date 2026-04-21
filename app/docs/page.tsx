@@ -147,6 +147,20 @@ export default function Docs() {
               {label}
             </a>
           ))}
+          <Link
+            href="/integrations"
+            style={{
+              color: '#888',
+              textDecoration: 'none',
+              fontSize: '0.875rem',
+              padding: '0.25rem 0',
+              marginTop: '0.75rem',
+              borderTop: '1px solid #1a1a1a',
+              paddingTop: '0.75rem',
+            }}
+          >
+            Integrations →
+          </Link>
         </nav>
       </aside>
 
