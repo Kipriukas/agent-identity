@@ -34,6 +34,12 @@ export default async function Dashboard() {
     .select('agent_id')
     .eq('issuer_id', user.id);
 
+  const { data: webhooks } = await admin
+    .from('webhooks')
+    .select('id, url, events, active, created_at')
+    .eq('issuer_id', user.id)
+    .order('created_at', { ascending: false });
+
   const eventList = allForCounts ?? [];
   const agentIds = new Set(eventList.map((e) => e.agent_id).filter(Boolean));
   const revokedIds = new Set((revocations ?? []).map((r) => r.agent_id));
@@ -52,6 +58,7 @@ export default async function Dashboard() {
       publicKey={issuer?.public_key ?? null}
       stats={stats}
       events={events ?? []}
+      webhooks={webhooks ?? []}
     />
   );
 }

@@ -8,6 +8,7 @@ const nav = [
   ['delegation', 'Delegation'],
   ['revocation', 'Revocation'],
   ['audit-log', 'Audit log'],
+  ['webhooks', 'Webhooks'],
   ['api-reference', 'API reference'],
 ];
 
@@ -376,6 +377,89 @@ curl https://agent-identity-blush.vercel.app/api/audit?issuer_id=your-company
   ]
 }`}
           </pre>
+        </section>
+
+        {/* WEBHOOKS */}
+        <section id="webhooks" style={{ marginBottom: '4rem' }}>
+          <h2 style={sectionHeading}>Webhooks</h2>
+          <p style={paragraph}>
+            Register a webhook URL and get notified in real time when a token is rejected or
+            revoked. Every request is signed with your shared secret so your server can verify it
+            came from Agent Identity.
+          </p>
+
+          <div style={stepHeading}>Register a webhook</div>
+          <p style={paragraph}>
+            Open the <Link href="/dashboard" style={{ color: '#4ade80', textDecoration: 'none' }}>dashboard</Link>,
+            paste your endpoint URL, pick the events you care about, and supply a shared secret. Or
+            register programmatically:
+          </p>
+          <pre style={codeBlock}>
+{`curl -X POST https://agent-identity-blush.vercel.app/api/webhooks \\
+  -H "Content-Type: application/json" \\
+  --cookie "sb-access-token=..." \\
+  -d '{
+    "url": "https://your-server.com/webhook",
+    "secret": "a-long-random-string",
+    "events": ["token.rejected", "token.revoked"]
+  }'`}
+          </pre>
+
+          <div style={stepHeading}>Payload format</div>
+          <pre style={codeBlock}>
+{`POST https://your-server.com/webhook
+Content-Type: application/json
+x-agent-identity-signature: sha256=<hex>
+
+{
+  "event": "token.rejected",
+  "timestamp": "2026-04-21T09:42:00.000Z",
+  "agent_id": "47a655c047ea9c01...",
+  "issuer_id": "5d7f...",
+  "human_principal": "alice@example.com",
+  "reason": "Token has expired"
+}`}
+          </pre>
+
+          <div style={stepHeading}>Verify the signature</div>
+          <p style={paragraph}>
+            Compute <code style={inlineCode}>HMAC-SHA256</code> over the raw request body using your
+            shared secret, then constant-time compare with the hex in the header. <em>Always use
+            the raw bytes — re-stringifying the parsed JSON will change the signature.</em>
+          </p>
+          <pre style={codeBlock}>
+{`import { createHmac, timingSafeEqual } from 'crypto'
+
+export async function POST(req: Request) {
+  const signature = req.headers.get('x-agent-identity-signature') ?? ''
+  const provided = signature.replace(/^sha256=/, '')
+  const rawBody = await req.text()
+
+  const expected = createHmac('sha256', process.env.WEBHOOK_SECRET!)
+    .update(rawBody)
+    .digest('hex')
+
+  const ok =
+    provided.length === expected.length &&
+    timingSafeEqual(Buffer.from(provided, 'hex'), Buffer.from(expected, 'hex'))
+
+  if (!ok) return new Response('Invalid signature', { status: 401 })
+
+  const event = JSON.parse(rawBody)
+  // event.event, event.agent_id, event.reason, ...
+  return new Response('ok')
+}`}
+          </pre>
+
+          <div style={stepHeading}>Delivery guarantees</div>
+          <p style={paragraph}>
+            Delivery is fire-and-forget after the triggering response is sent — failed deliveries do
+            not block or retry. Each attempt is recorded in the audit log as{' '}
+            <code style={inlineCode}>webhook.delivered</code> or{' '}
+            <code style={inlineCode}>webhook.failed</code>, with the URL and HTTP status in{' '}
+            <code style={inlineCode}>details</code>. Configure your endpoint to respond within 10
+            seconds.
+          </p>
         </section>
 
         {/* API REFERENCE */}

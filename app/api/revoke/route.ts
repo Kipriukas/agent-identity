@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { after } from 'next/server';
 import { supabase } from '@/lib/supabase';
+import { sendWebhook } from '@/lib/webhook';
 
 export async function POST(request: NextRequest) {
   const { agent_id, issuer_id, reason } = await request.json();
@@ -18,6 +20,16 @@ export async function POST(request: NextRequest) {
     event_type: 'token.revoked',
     success: true,
   });
+
+  after(() =>
+    sendWebhook({
+      event: 'token.revoked',
+      issuer_id,
+      agent_id,
+      human_principal: '',
+      reason,
+    }).catch(() => {})
+  );
 
   return NextResponse.json({ revoked: true, agent_id });
 }

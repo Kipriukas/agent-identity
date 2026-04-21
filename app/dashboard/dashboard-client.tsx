@@ -15,19 +15,36 @@ type AuditEvent = {
   details?: string | null;
 };
 
+type Webhook = {
+  id: string;
+  url: string;
+  events: string[];
+  active: boolean;
+  created_at: string;
+};
+
+const WEBHOOK_EVENT_OPTIONS = ['token.rejected', 'token.revoked'] as const;
+
 type Props = {
   email: string;
   issuerId: string;
   publicKey: string | null;
   stats: { issued: number; verified: number; revoked: number; active: number };
   events: AuditEvent[];
+  webhooks: Webhook[];
 };
 
-export default function DashboardClient({ email, issuerId, publicKey, stats, events }: Props) {
+export default function DashboardClient({ email, issuerId, publicKey, stats, events, webhooks: initialWebhooks }: Props) {
   const router = useRouter();
   const [newPrivateKey, setNewPrivateKey] = useState<string | null>(null);
   const [generating, setGenerating] = useState(false);
   const [copied, setCopied] = useState<string | null>(null);
+  const [webhooks, setWebhooks] = useState<Webhook[]>(initialWebhooks);
+  const [newUrl, setNewUrl] = useState('');
+  const [newSecret, setNewSecret] = useState('');
+  const [newEvents, setNewEvents] = useState<string[]>([...WEBHOOK_EVENT_OPTIONS]);
+  const [webhookBusy, setWebhookBusy] = useState<string | null>(null);
+  const [webhookMessage, setWebhookMessage] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null);
 
   async function generateNewKeys() {
     if (!confirm('Generate a new key pair? This will invalidate all tokens signed with your current private key.')) {
@@ -74,6 +91,67 @@ export default function DashboardClient({ email, issuerId, publicKey, stats, eve
     a.download = `audit-events-${issuerId.slice(0, 8)}.csv`;
     a.click();
     URL.revokeObjectURL(url);
+  }
+
+  async function addWebhook(e: React.FormEvent) {
+    e.preventDefault();
+    setWebhookMessage(null);
+    if (newEvents.length === 0) {
+      setWebhookMessage({ kind: 'error', text: 'Select at least one event.' });
+      return;
+    }
+    setWebhookBusy('add');
+    const res = await fetch('/api/webhooks', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url: newUrl, secret: newSecret, events: newEvents }),
+    });
+    const data = await res.json();
+    setWebhookBusy(null);
+    if (!res.ok) {
+      setWebhookMessage({ kind: 'error', text: data.error ?? 'Could not add webhook' });
+      return;
+    }
+    setWebhooks([data.webhook, ...webhooks]);
+    setNewUrl('');
+    setNewSecret('');
+    setNewEvents([...WEBHOOK_EVENT_OPTIONS]);
+    setWebhookMessage({ kind: 'ok', text: 'Webhook added.' });
+  }
+
+  async function deleteWebhook(id: string) {
+    if (!confirm('Delete this webhook?')) return;
+    setWebhookBusy(id);
+    setWebhookMessage(null);
+    const res = await fetch(`/api/webhooks?id=${encodeURIComponent(id)}`, { method: 'DELETE' });
+    setWebhookBusy(null);
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      setWebhookMessage({ kind: 'error', text: data.error ?? 'Could not delete webhook' });
+      return;
+    }
+    setWebhooks(webhooks.filter((w) => w.id !== id));
+  }
+
+  async function testWebhook(id: string) {
+    setWebhookBusy(`test:${id}`);
+    setWebhookMessage(null);
+    const res = await fetch('/api/webhooks/test', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ webhook_id: id }),
+    });
+    const data = await res.json().catch(() => ({}));
+    setWebhookBusy(null);
+    if (data.delivered) {
+      setWebhookMessage({ kind: 'ok', text: `Test delivered (HTTP ${data.status}).` });
+    } else {
+      setWebhookMessage({ kind: 'error', text: data.error ?? `Test failed (HTTP ${data.status ?? '?'})` });
+    }
+  }
+
+  function toggleEvent(ev: string) {
+    setNewEvents(newEvents.includes(ev) ? newEvents.filter((e) => e !== ev) : [...newEvents, ev]);
   }
 
   const card: React.CSSProperties = {
@@ -270,7 +348,145 @@ const token = await issueToken({
           </div>
         </section>
 
-        {/* SECTION 4 — Quick start */}
+        {/* SECTION 4 — Webhooks */}
+        <section style={{ marginBottom: '2.5rem' }}>
+          <div style={{ ...label, marginBottom: '1rem' }}>Webhooks</div>
+
+          <div style={{ ...card, marginBottom: '1rem' }}>
+            {webhooks.length === 0 ? (
+              <div style={{ color: '#666', fontSize: '0.85rem' }}>
+                No webhooks yet. Add one below to get notified when tokens are rejected or revoked.
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                {webhooks.map((w) => (
+                  <div
+                    key={w.id}
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      gap: '1rem',
+                      padding: '0.75rem',
+                      backgroundColor: '#0d0d0d',
+                      border: '1px solid #1a1a1a',
+                      borderRadius: '4px',
+                      flexWrap: 'wrap',
+                    }}
+                  >
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ color: '#e0e0e0', fontSize: '0.85rem', wordBreak: 'break-all' }}>
+                        {w.url}
+                      </div>
+                      <div style={{ color: '#888', fontSize: '0.7rem', marginTop: '0.25rem' }}>
+                        {w.events.join(', ')}
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', gap: '0.5rem' }}>
+                      <button
+                        onClick={() => testWebhook(w.id)}
+                        disabled={webhookBusy === `test:${w.id}`}
+                        style={webhookBusy === `test:${w.id}` ? { ...btn, opacity: 0.5 } : btn}
+                      >
+                        {webhookBusy === `test:${w.id}` ? 'Testing…' : 'Test'}
+                      </button>
+                      <button
+                        onClick={() => deleteWebhook(w.id)}
+                        disabled={webhookBusy === w.id}
+                        style={
+                          webhookBusy === w.id
+                            ? { ...btn, opacity: 0.5 }
+                            : { ...btn, color: '#f87171' }
+                        }
+                      >
+                        {webhookBusy === w.id ? 'Deleting…' : 'Delete'}
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <form onSubmit={addWebhook} style={{ ...card, display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+            <div style={{ color: '#888', fontSize: '0.75rem' }}>Add a webhook</div>
+            <input
+              type="url"
+              required
+              placeholder="https://your-server.com/webhook"
+              value={newUrl}
+              onChange={(e) => setNewUrl(e.target.value)}
+              style={{
+                backgroundColor: '#151515',
+                color: '#e0e0e0',
+                border: '1px solid #222',
+                borderRadius: '4px',
+                padding: '0.5rem 0.75rem',
+                fontFamily: 'inherit',
+                fontSize: '0.8rem',
+              }}
+            />
+            <input
+              type="text"
+              required
+              placeholder="shared secret (we use this to sign each payload)"
+              value={newSecret}
+              onChange={(e) => setNewSecret(e.target.value)}
+              style={{
+                backgroundColor: '#151515',
+                color: '#e0e0e0',
+                border: '1px solid #222',
+                borderRadius: '4px',
+                padding: '0.5rem 0.75rem',
+                fontFamily: 'inherit',
+                fontSize: '0.8rem',
+              }}
+            />
+            <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
+              {WEBHOOK_EVENT_OPTIONS.map((ev) => (
+                <label
+                  key={ev}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.5rem',
+                    color: '#ccc',
+                    fontSize: '0.8rem',
+                    cursor: 'pointer',
+                  }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={newEvents.includes(ev)}
+                    onChange={() => toggleEvent(ev)}
+                  />
+                  <code style={{ color: '#facc15', fontSize: '0.8rem' }}>{ev}</code>
+                </label>
+              ))}
+            </div>
+            <div>
+              <button
+                type="submit"
+                disabled={webhookBusy === 'add'}
+                style={webhookBusy === 'add' ? { ...btn, opacity: 0.5 } : btn}
+              >
+                {webhookBusy === 'add' ? 'Adding…' : 'Add webhook'}
+              </button>
+            </div>
+            {webhookMessage && (
+              <div
+                style={{
+                  color: webhookMessage.kind === 'ok' ? '#4ade80' : '#f87171',
+                  fontSize: '0.8rem',
+                }}
+              >
+                {webhookMessage.text}
+              </div>
+            )}
+          </form>
+        </section>
+
+        {/* SECTION 5 — Quick start */}
         <section style={{ marginBottom: '2.5rem' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
             <div style={label}>Quick start for your account</div>
