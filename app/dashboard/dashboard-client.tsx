@@ -144,9 +144,18 @@ export default function DashboardClient({ email, issuerId, publicKey, stats, eve
     const data = await res.json().catch(() => ({}));
     setWebhookBusy(null);
     if (data.delivered) {
-      setWebhookMessage({ kind: 'ok', text: `Test delivered (HTTP ${data.status}).` });
+      const parts = [`Test delivered (HTTP ${data.status}`];
+      if (typeof data.elapsed_ms === 'number') parts.push(`${data.elapsed_ms}ms`);
+      const head = `${parts.join(', ')}).`;
+      const tail = data.response_snippet ? ` Response: ${data.response_snippet}` : '';
+      setWebhookMessage({ kind: 'ok', text: head + tail });
     } else {
-      setWebhookMessage({ kind: 'error', text: data.error ?? `Test failed (HTTP ${data.status ?? '?'})` });
+      const bits: string[] = [];
+      if (typeof data.status === 'number') bits.push(`HTTP ${data.status}`);
+      if (typeof data.elapsed_ms === 'number') bits.push(`${data.elapsed_ms}ms`);
+      if (data.error) bits.push(data.error);
+      if (data.url) bits.push(`→ ${data.url}`);
+      setWebhookMessage({ kind: 'error', text: bits.length ? `Test failed: ${bits.join(' — ')}` : 'Test failed' });
     }
   }
 
