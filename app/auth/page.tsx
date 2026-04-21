@@ -48,6 +48,13 @@ export default function Auth() {
 
       setPrivateKey(payload.private_key);
       setLoading(false);
+
+      fetch('/api/auth/welcome', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, issuer_id: payload.issuer_id }),
+      }).catch(() => {});
+
       return;
     }
 

@@ -39,5 +39,9 @@ export async function POST() {
     success: true,
   });
 
-  return NextResponse.json({ private_key: keys.privateKeyBase64, public_key: keys.publicKeyBase64 });
+  return NextResponse.json({
+    private_key: keys.privateKeyBase64,
+    public_key: keys.publicKeyBase64,
+    issuer_id: user.id,
+  });
 }
