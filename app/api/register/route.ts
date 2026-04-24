@@ -1,7 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
+import { checkRateLimit, getClientIp, registerLimiter } from '@/lib/rate-limit';
 
 export async function POST(request: NextRequest) {
+  const rl = await checkRateLimit(registerLimiter, getClientIp(request));
+  if (!rl.allowed) {
+    return NextResponse.json(
+      { error: 'Rate limit exceeded', retry_after: rl.retryAfter },
+      { status: 429, headers: { 'Retry-After': String(rl.retryAfter) } },
+    );
+  }
+
   const { issuer_id, public_key, name } = await request.json();
 
   const { data, error } = await supabase

@@ -4,12 +4,22 @@ import { decodeJwt } from 'jose';
 import { supabase } from '@/lib/supabase';
 import { loadPublicKey, verifyToken } from '@/token';
 import { sendWebhook } from '@/lib/webhook';
+import { checkRateLimit, getClientIp, verifyLimiter } from '@/lib/rate-limit';
 
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ agentId: string }> }
 ) {
   const { agentId } = await params;
+
+  const rl = await checkRateLimit(verifyLimiter, getClientIp(request));
+  if (!rl.allowed) {
+    return NextResponse.json(
+      { error: 'Rate limit exceeded', retry_after: rl.retryAfter },
+      { status: 429, headers: { 'Retry-After': String(rl.retryAfter) } },
+    );
+  }
+
   const authHeader = request.headers.get('authorization');
 
   if (!authHeader?.startsWith('Bearer ')) {
