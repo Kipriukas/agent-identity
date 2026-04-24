@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase-browser';
@@ -21,6 +21,13 @@ type Webhook = {
   events: string[];
   active: boolean;
   created_at: string;
+};
+
+type ActivityPoint = {
+  date: string;
+  issued: number;
+  verified: number;
+  rejected: number;
 };
 
 const WEBHOOK_EVENT_OPTIONS = ['token.rejected', 'token.revoked'] as const;
@@ -45,6 +52,20 @@ export default function DashboardClient({ email, issuerId, publicKey, stats, eve
   const [newEvents, setNewEvents] = useState<string[]>([...WEBHOOK_EVENT_OPTIONS]);
   const [webhookBusy, setWebhookBusy] = useState<string | null>(null);
   const [webhookMessage, setWebhookMessage] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null);
+  const [activity, setActivity] = useState<ActivityPoint[] | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch('/api/analytics')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (!cancelled && Array.isArray(data)) setActivity(data);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   async function generateNewKeys() {
     if (!confirm('Generate a new key pair? This will invalidate all tokens signed with your current private key.')) {
@@ -273,6 +294,20 @@ const token = await issueToken({
                 {generating ? 'Generating…' : 'Generate new key pair'}
               </button>
             </div>
+          </div>
+        </section>
+
+        {/* SECTION 2a — Activity */}
+        <section style={{ marginBottom: '2.5rem' }}>
+          <div style={{ ...label, marginBottom: '1rem' }}>Activity</div>
+          <div style={card}>
+            {activity === null ? (
+              <div style={{ color: '#666', fontSize: '0.85rem', textAlign: 'center', padding: '2rem' }}>
+                Loading…
+              </div>
+            ) : (
+              <ActivityChart data={activity} />
+            )}
           </div>
         </section>
 
@@ -586,5 +621,129 @@ const token = await issueToken({
         </div>
       )}
     </main>
+  );
+}
+
+function ActivityChart({ data }: { data: ActivityPoint[] }) {
+  const width = 880;
+  const height = 240;
+  const padLeft = 40;
+  const padRight = 16;
+  const padTop = 16;
+  const padBottom = 28;
+  const plotW = width - padLeft - padRight;
+  const plotH = height - padTop - padBottom;
+
+  const n = data.length;
+  const maxVal = Math.max(
+    1,
+    ...data.flatMap((d) => [d.issued, d.verified, d.rejected]),
+  );
+
+  const x = (i: number) => padLeft + (n === 1 ? plotW / 2 : (i * plotW) / (n - 1));
+  const y = (v: number) => padTop + plotH - (v / maxVal) * plotH;
+
+  const pathFor = (key: 'issued' | 'verified' | 'rejected') =>
+    data.map((d, i) => `${i === 0 ? 'M' : 'L'} ${x(i)} ${y(d[key])}`).join(' ');
+
+  const yTicks = [0, Math.round(maxVal / 2), maxVal];
+
+  const fmtDate = (iso: string) => {
+    const d = new Date(`${iso}T00:00:00Z`);
+    return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  };
+
+  const series: { key: 'issued' | 'verified' | 'rejected'; label: string; color: string }[] = [
+    { key: 'issued', label: 'Tokens issued', color: '#60a5fa' },
+    { key: 'verified', label: 'Verifications', color: '#4ade80' },
+    { key: 'rejected', label: 'Rejections', color: '#f87171' },
+  ];
+
+  return (
+    <div>
+      <svg
+        viewBox={`0 0 ${width} ${height}`}
+        style={{ width: '100%', height: 'auto', display: 'block' }}
+        role="img"
+        aria-label="Activity over the last 7 days"
+      >
+        {yTicks.map((t) => (
+          <g key={t}>
+            <line
+              x1={padLeft}
+              x2={width - padRight}
+              y1={y(t)}
+              y2={y(t)}
+              stroke="#1f1f1f"
+              strokeWidth={1}
+            />
+            <text
+              x={padLeft - 8}
+              y={y(t) + 4}
+              textAnchor="end"
+              fill="#666"
+              fontSize={10}
+              fontFamily="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace"
+            >
+              {t}
+            </text>
+          </g>
+        ))}
+
+        {data.map((d, i) => (
+          <text
+            key={d.date}
+            x={x(i)}
+            y={height - 8}
+            textAnchor="middle"
+            fill="#666"
+            fontSize={10}
+            fontFamily="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace"
+          >
+            {fmtDate(d.date)}
+          </text>
+        ))}
+
+        {series.map((s) => (
+          <g key={s.key}>
+            <path d={pathFor(s.key)} fill="none" stroke={s.color} strokeWidth={1.5} />
+            {data.map((d, i) => (
+              <circle
+                key={`${s.key}-${i}`}
+                cx={x(i)}
+                cy={y(d[s.key])}
+                r={2.5}
+                fill={s.color}
+              />
+            ))}
+          </g>
+        ))}
+      </svg>
+
+      <div
+        style={{
+          display: 'flex',
+          gap: '1.25rem',
+          marginTop: '0.75rem',
+          fontSize: '0.75rem',
+          color: '#aaa',
+          flexWrap: 'wrap',
+        }}
+      >
+        {series.map((s) => (
+          <div key={s.key} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+            <span
+              style={{
+                display: 'inline-block',
+                width: 10,
+                height: 2,
+                backgroundColor: s.color,
+              }}
+            />
+            {s.label}
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }
